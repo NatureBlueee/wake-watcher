@@ -1,0 +1,41 @@
+# wake-watcherctl-generated — do not hand-edit. Re-run `wake-watcherctl init`
+# in the project directory instead; it will regenerate this file in place.
+#
+# One unit = one monitored project. WAKE_WATCHER_PROJECT_ROOT below is set to
+# whatever directory `init` was run from, unconditionally, every time — see
+# packaging/launchd/wake-watcher.plist.template for why that can't be left
+# to wake_watcher.py's built-in default.
+[Unit]
+Description=wake-watcher — detects transient-error-interrupted Claude Code background jobs and wakes them (project: @WAKE_WATCHER_PROJECT_ROOT@)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@WAKE_WATCHER_USER@
+Group=@WAKE_WATCHER_GROUP@
+WorkingDirectory=@WAKE_WATCHER_PROJECT_ROOT@
+
+Environment=WAKE_WATCHER_PROJECT_ROOT=@WAKE_WATCHER_PROJECT_ROOT@
+Environment=WAKE_WATCHER_LOG=@WAKE_WATCHER_LOG@
+Environment=WAKE_WATCHER_HEARTBEAT=@WAKE_WATCHER_HEARTBEAT@
+Environment=WAKE_WATCHER_LEDGER=@WAKE_WATCHER_LEDGER@
+Environment=WAKE_WATCHER_NEEDS_HUMAN=@WAKE_WATCHER_NEEDS_HUMAN@
+Environment=WAKE_WATCHER_CLAUDE_RESOLUTION_STATE=@WAKE_WATCHER_CLAUDE_RESOLUTION_STATE@
+Environment=WAKE_WATCHER_WATERMARK_FILE=@WAKE_WATCHER_WATERMARK_FILE@
+Environment=WAKE_WATCHER_DO_NOT_WAKE_FILE=@WAKE_WATCHER_DO_NOT_WAKE_FILE@
+
+ExecStart=@WAKE_WATCHER_PYTHON@ @WAKE_WATCHER_SCRIPT@
+Restart=always
+RestartSec=10
+
+# Hardening. wake-watcher's two most dangerous optional features are typing
+# into a *live* agent's input (PTY injection, opt-in) and LIVENESS_CMD, which
+# executes an arbitrary operator-supplied command on every poll — configuring
+# it is equivalent to trusting it like a cron entry. Neither needs root, and
+# this unit must never be able to acquire privileges it didn't start with.
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

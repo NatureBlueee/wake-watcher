@@ -1,0 +1,227 @@
+{
+  "_readme": "Transient-wake allow/veto rules for classify.py. Each entry's `note` is provenance -- why this exact string is here -- extracted from the original inline comments when this table still lived in Python. See CONTRIBUTING.md and SECURITY.md before editing: a change here decides which errors get retried automatically, so it needs a human security review, not just a green test run.",
+  "TRANSIENT_PATTERNS": [
+    {
+      "pattern": "connection closed mid-response",
+      "note": "Connection-closed family, original allowlist. Observed 34 times; genuinely interrupted background a background job.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "connection closed while thinking",
+      "note": "Same family as mid-response (stream cut, not a refusal). Historical instance: 2026-06-16 one session -- owner manually resumed 28s later (\"network hiccuped just now, continue, retry, continue\"). No log survives to confirm whether this was actually scanned live at the time; only that this exact wording was missing from the allowlist.",
+      "added": "2026-07-10"
+    },
+    {
+      "pattern": "\\bconnection closed\\b",
+      "note": "Family-wide safety net added alongside the two entries above, to catch any future third wording beyond \"before producing a response\".",
+      "added": "2026-07-10"
+    },
+    {
+      "pattern": "the socket connection was closed unexpectedly",
+      "note": "Connection-closed family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "stream idle timeout",
+      "note": "Connection-closed family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "unable to connect to api",
+      "note": "Connection-closed family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "unknown_certificate_verification_error",
+      "note": "Connection-closed family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "response stalled mid-stream",
+      "note": "Stream-interruption family. Owner testing on 2026-07-10 found this exact string missing from the allowlist. Cross-checked against the real log line by line, severity differed per session: one session errored at 19:23 and was not resumed until 02:26 (~7h real stall, with a 19:23:51 log line confirming it was scanned live and misjudged \"no transient pattern matched\") -- this is the actual gap this addition closed. one session errored at 03:06:33 and was resumed at 03:07:36 (~63s) -- the same misjudgment fired, so the gap was real, but the manual retry beat the next scan cycle by little.",
+      "added": "2026-07-10"
+    },
+    {
+      "pattern": "server error mid-response",
+      "note": "Same stream-interruption family and investigation as \"response stalled mid-stream\" -- this is the exact wording one session hit. That session and another session both had the same real gap (each logged one matching \"not matched\" misjudgment), but a user retry / teammate message landed in the same scan window each time, so no extra stall was actually observed -- recorded to prove the gap was real, not to claim either session waited long.",
+      "added": "2026-07-10"
+    },
+    {
+      "pattern": "\\bmid-(?:response|stream)\\b",
+      "note": "Family-wide safety net: any text containing \"mid-response\"/\"mid-stream\" is semantically a physically-cut stream (the model's own wording is typically \"the response above may be incomplete\"), not a refusal -- classified transient so future wording variants don't slip through the same gap again.",
+      "added": "2026-07-10"
+    },
+    {
+      "pattern": "server is temporarily limiting requests",
+      "note": "Rate-limit / infra-throttling family, original allowlist. Observed 26 times collectively across this family. This is infra-side throttling, not a usage-quota limit -- see NON_TRANSIENT_VETO for the quota-exhaustion family, which must NOT be treated as transient.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\brate limited\\b",
+      "note": "Rate-limit / infra-throttling family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\brate.?limit(?:ed|ing)?\\b.*\\bnot your usage limit\\b",
+      "note": "Rate-limit / infra-throttling family, original allowlist -- the explicit \"not your usage limit\" wording is the clearest possible signal this is infra throttling, not quota exhaustion.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "overloaded_error",
+      "note": "Rate-limit / infra-throttling family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\boverloaded\\b",
+      "note": "Rate-limit / infra-throttling family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\bapi error:\\s*502\\b",
+      "note": "5xx transient-server-error family, original allowlist. Observed in production.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\bapi error:\\s*503\\b",
+      "note": "5xx transient-server-error family, original allowlist. Observed in production.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\bapi error:\\s*529\\b",
+      "note": "5xx transient-server-error family, original allowlist. Observed in production.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\bapi error:\\s*500\\b",
+      "note": "5xx transient-server-error family, original allowlist -- added as the logical extension of the observed 502/503/529 wording, not separately measured.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\b502 bad gateway\\b",
+      "note": "5xx transient-server-error family, original allowlist -- alternate wording for the same 502 condition.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\b503 service unavailable\\b",
+      "note": "5xx transient-server-error family, original allowlist -- alternate wording for the same 503 condition.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\b529\\b.*overload",
+      "note": "5xx transient-server-error family, original allowlist -- alternate wording for the same 529 condition.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "this is not your fault",
+      "note": "\"Not your fault\" family (usually rendered in yellow in the terminal) -- generic Anthropic infra-side wording, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "please (?:retry|try again)",
+      "note": "\"Not your fault\" family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "temporarily unavailable",
+      "note": "\"Not your fault\" family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "internal server error",
+      "note": "\"Not your fault\" family, original allowlist.",
+      "added": "2026-06-22"
+    }
+  ],
+  "NON_TRANSIENT_VETO": [
+    {
+      "pattern": "\\brejected\\b",
+      "note": "User-rejection family, original allowlist. Rule #1: never auto-retry a rejected/denied action.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\bdenied\\b",
+      "note": "User-rejection family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "user (?:rejected|cancelled|canceled|aborted|declined|interrupted)",
+      "note": "User-rejection family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "permission (?:denied|error)",
+      "note": "User-rejection / permission family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\b403\\b",
+      "note": "403 Request not allowed is a permission problem, not a transient one, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "request not allowed",
+      "note": "Permission family, original allowlist -- same condition as 403, worded differently.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "usage limit reached",
+      "note": "Quota-exhaustion family, original allowlist -- a real usage-quota problem (not infra throttling); retrying does nothing useful and can loop forever.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "you've (?:reached|hit) your .*limit",
+      "note": "Quota-exhaustion family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "quota (?:exceeded|exhausted)",
+      "note": "Quota-exhaustion family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "insufficient (?:credits|quota|balance)",
+      "note": "Quota-exhaustion family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "out of credits",
+      "note": "Quota-exhaustion family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "authentication (?:failed|required|error)",
+      "note": "Auth family, original allowlist -- retrying does nothing, the user has to log back in.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "re-?auth(?:enticate|entication)? required",
+      "note": "Auth family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "invalid api key",
+      "note": "Auth family, original allowlist.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "\\b400\\b",
+      "note": "Real request-construction-error family, original allowlist. Golden negative: this exact class of 400 schema error (tool_use_id mismatch, a background job) was manually retried 6x and failed every single time -- automatic retry would just loop forever.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "unexpected `?tool_use_id`?",
+      "note": "Same 400-schema golden-negative family and investigation as the plain \\b400\\b rule above.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "each .* block must have a corresponding",
+      "note": "Same 400-schema golden-negative family.",
+      "added": "2026-06-22"
+    },
+    {
+      "pattern": "messages\\.\\d+\\.content",
+      "note": "Same 400-schema golden-negative family.",
+      "added": "2026-06-22"
+    }
+  ]
+}

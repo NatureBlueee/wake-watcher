@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wake-watcher"
+version = "0.1.0"
+description = "A local watchdog that detects Claude Code background sessions killed mid-turn by transient infrastructure errors and wakes them back up"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.urls]
+Homepage = "https://github.com/NatureBlueee/wake-watcher"
+Source = "https://github.com/NatureBlueee/wake-watcher"
+Issues = "https://github.com/NatureBlueee/wake-watcher/issues"
+
+# Zero runtime dependencies, on purpose: production runs under the system
+# Python (3.9, no tomllib in stdlib — that's why the rule data is JSON, not
+# TOML), and a daemon that gets adopted into someone's launchd/systemd
+# shouldn't drag a dependency tree into a process that runs unattended and
+# unwatched. `dev` exists only because a handful of the test files are
+# pytest-native; running the full suite still goes through
+# scripts/run-tests.sh, not bare pytest — see CONTRIBUTING.md.
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+wake-watcher = "wake_watcher.wake_watcher:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+wake_watcher = ["patterns.json"]

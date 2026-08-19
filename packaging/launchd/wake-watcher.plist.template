@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  wake-watcherctl-generated — do not hand-edit. Re-run `wake-watcherctl init`
+  in the project directory instead; it will regenerate this file in place.
+
+  One plist = one monitored project. WAKE_WATCHER_PROJECT_ROOT below is set
+  to whatever directory `init` was run from, unconditionally, every time.
+  This is deliberate: wake_watcher.py's own built-in default derives the
+  project root from where the *code* is installed, which has nothing to do
+  with which project you want watched once the code lives in a shared
+  location instead of being copied into each project. Relying on that
+  default here would silently point this instance at the wrong project.
+  See the threat model docs for the full reasoning.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>@WAKE_WATCHER_LABEL@</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@WAKE_WATCHER_PYTHON@</string>
+        <string>@WAKE_WATCHER_SCRIPT@</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>@WAKE_WATCHER_HOME@</string>
+        <key>PATH</key>
+        <string>@WAKE_WATCHER_PATH@</string>
+        <key>WAKE_WATCHER_PROJECT_ROOT</key>
+        <string>@WAKE_WATCHER_PROJECT_ROOT@</string>
+        <key>WAKE_WATCHER_LOG</key>
+        <string>@WAKE_WATCHER_LOG@</string>
+        <key>WAKE_WATCHER_HEARTBEAT</key>
+        <string>@WAKE_WATCHER_HEARTBEAT@</string>
+        <key>WAKE_WATCHER_LEDGER</key>
+        <string>@WAKE_WATCHER_LEDGER@</string>
+        <key>WAKE_WATCHER_NEEDS_HUMAN</key>
+        <string>@WAKE_WATCHER_NEEDS_HUMAN@</string>
+        <key>WAKE_WATCHER_CLAUDE_RESOLUTION_STATE</key>
+        <string>@WAKE_WATCHER_CLAUDE_RESOLUTION_STATE@</string>
+        <key>WAKE_WATCHER_WATERMARK_FILE</key>
+        <string>@WAKE_WATCHER_WATERMARK_FILE@</string>
+        <key>WAKE_WATCHER_DO_NOT_WAKE_FILE</key>
+        <string>@WAKE_WATCHER_DO_NOT_WAKE_FILE@</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>WorkingDirectory</key>
+    <string>@WAKE_WATCHER_PROJECT_ROOT@</string>
+    <key>StandardOutPath</key>
+    <string>@WAKE_WATCHER_STDOUT_LOG@</string>
+    <key>StandardErrorPath</key>
+    <string>@WAKE_WATCHER_STDERR_LOG@</string>
+</dict>
+</plist>

@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+# wake-watcherctl — control one wake-watcher instance.
+#
+#   wake-watcherctl dry [name]        foreground, --dry-run — do this before `start`/`init`
+#   wake-watcherctl once [name]       single scan pass then exit (debugging)
+#   wake-watcherctl start [name]      background, no OS service — dies at logout/reboot
+#   wake-watcherctl stop [name]       stop the background process started by `start`
+#   wake-watcherctl status [name]     is it running
+#   wake-watcherctl tail [name] [n]   tail the instance's log (default 40 lines)
+#   wake-watcherctl init [name]       generate + load a launchd/systemd service for THIS directory
+#   wake-watcherctl uninstall [name]  bootout/disable + remove that service (state/log kept)
+#
+# `name` identifies one instance and defaults to the current directory's
+# basename, sanitized. One name = one project = one state directory = one
+# service — this is what lets one wake-watcher install watch several
+# projects at once without them stepping on each other's ledgers.
+#
+# The project being watched is always the directory `init` is run from.
+# wake_watcher.py's own built-in default for WAKE_WATCHER_PROJECT_ROOT
+# derives it from where the code is installed, not from what you want
+# monitored — see packaging/launchd/wake-watcher.plist.template for why
+# `init` always overrides it explicitly instead of relying on that default.
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# locate ourselves, even through the symlink `install.sh` drops in ~/.local/bin
+# ---------------------------------------------------------------------------
+_resolve_self() {
+  local src="$1" dir
+  while [ -h "$src" ]; do
+    dir="$(cd -P "$(dirname -- "$src")" && pwd)"
+    src="$(readlink -- "$src")"
+    case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+  done
+  cd -P "$(dirname -- "$src")" && pwd
+}
+SELF_DIR="$(_resolve_self "${BASH_SOURCE[0]}")"
+PREFIX="$(cd -P "$SELF_DIR/.." && pwd)"
+
+PY="${WAKE_WATCHER_PYTHON:-python3}"
+SCRIPT="$PREFIX/src/wake_watcher/wake_watcher.py"
+LAUNCHD_TEMPLATE="$PREFIX/packaging/launchd/wake-watcher.plist.template"
+SYSTEMD_TEMPLATE="$PREFIX/packaging/systemd/wake-watcher.service.template"
+MARKER="wake-watcherctl-generated"
+
+_state_root="${XDG_STATE_HOME:-$HOME/.local/state}/wake-watcher"
+
+die() { printf 'wake-watcherctl: %s\n' "$*" >&2; exit 1; }
+
+sanitize_name() {
+  printf '%s' "$1" | tr -c 'A-Za-z0-9_-' '-' | tr 'A-Z' 'a-z'
+}
+
+# project_root, [override] -> instance name on stdout
+instance_name() {
+  local project_root="$1" override="${2:-}"
+  if [ -n "$override" ]; then sanitize_name "$override"; else sanitize_name "$(basename "$project_root")"; fi
+}
+
+# name -> sets STATE_DIR LOG PIDFILE HEARTBEAT LEDGER NEEDS_HUMAN
+#         CLAUDE_RESOLUTION_STATE WATERMARK_FILE DO_NOT_WAKE_FILE
+compute_paths() {
+  local name="$1"
+  STATE_DIR="$_state_root/$name"
+  LOG="$STATE_DIR/wake-watcher.log"
+  PIDFILE="$STATE_DIR/wake-watcher.pid"
+  HEARTBEAT="$STATE_DIR/wake-watcher.heartbeat"
+  LEDGER="$STATE_DIR/ledger.json"
+  NEEDS_HUMAN="$STATE_DIR/needs-human.log"
+  CLAUDE_RESOLUTION_STATE="$STATE_DIR/claude-resolution-state.json"
+  WATERMARK_FILE="$STATE_DIR/watermark.json"
+  DO_NOT_WAKE_FILE="$STATE_DIR/do-not-wake.txt"
+}
+
+is_running() {
+  [ -f "$PIDFILE" ] || return 1
+  local pid; pid="$(cat "$PIDFILE" 2>/dev/null || echo)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+export_run_env() {
+  export WAKE_WATCHER_PROJECT_ROOT="$PROJECT_ROOT"
+  export WAKE_WATCHER_LOG="$LOG"
+  export WAKE_WATCHER_HEARTBEAT="$HEARTBEAT"
+  export WAKE_WATCHER_LEDGER="$LEDGER"
+  export WAKE_WATCHER_NEEDS_HUMAN="$NEEDS_HUMAN"
+  export WAKE_WATCHER_CLAUDE_RESOLUTION_STATE="$CLAUDE_RESOLUTION_STATE"
+  export WAKE_WATCHER_WATERMARK_FILE="$WATERMARK_FILE"
+  export WAKE_WATCHER_DO_NOT_WAKE_FILE="$DO_NOT_WAKE_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# direct process management (start/stop/status/once/dry/tail) — no OS
+# service involved, same model as running any other background job by hand
+# ---------------------------------------------------------------------------
+cmd_start() {
+  local name="$1" dry_flag="${2:-}"
+  mkdir -p "$STATE_DIR"
+  if is_running; then echo "already running (pid $(cat "$PIDFILE")) — instance '$name'"; return 0; fi
+  export_run_env
+  if [ "$dry_flag" = "--dry-run" ]; then
+    nohup "$PY" "$SCRIPT" --dry-run >>"$LOG" 2>&1 &
+  else
+    nohup "$PY" "$SCRIPT" >>"$LOG" 2>&1 &
+  fi
+  echo $! > "$PIDFILE"
+  echo "started wake-watcher '$name' pid $(cat "$PIDFILE"); log: $LOG"
+}
+
+cmd_stop() {
+  local name="$1"
+  if is_running; then
+    local pid; pid="$(cat "$PIDFILE")"
+    kill "$pid" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    echo "stopped '$name' pid $pid"
+  else
+    echo "'$name' not running"
+    rm -f "$PIDFILE" 2>/dev/null || true
+  fi
+}
+
+cmd_status() {
+  local name="$1"
+  if is_running; then echo "RUNNING '$name' pid $(cat "$PIDFILE")"; else echo "STOPPED '$name'"; fi
+}
+
+cmd_once() {
+  mkdir -p "$STATE_DIR"
+  export_run_env
+  exec "$PY" "$SCRIPT" --once
+}
+
+cmd_tail() {
+  local n="${1:-40}"
+  tail -n "$n" "$LOG" 2>/dev/null || echo "(no log yet: $LOG)"
+}
+
+# ---------------------------------------------------------------------------
+# init / uninstall — the persistent OS service, one per monitored project
+# ---------------------------------------------------------------------------
+render_template() {
+  local template="$1" out="$2"
+  sed \
+    -e "s|@WAKE_WATCHER_LABEL@|$LABEL|g" \
+    -e "s|@WAKE_WATCHER_PYTHON@|$PY_ABS|g" \
+    -e "s|@WAKE_WATCHER_SCRIPT@|$SCRIPT|g" \
+    -e "s|@WAKE_WATCHER_PROJECT_ROOT@|$PROJECT_ROOT|g" \
+    -e "s|@WAKE_WATCHER_HOME@|$HOME|g" \
+    -e "s|@WAKE_WATCHER_PATH@|$SAFE_PATH|g" \
+    -e "s|@WAKE_WATCHER_LOG@|$LOG|g" \
+    -e "s|@WAKE_WATCHER_HEARTBEAT@|$HEARTBEAT|g" \
+    -e "s|@WAKE_WATCHER_LEDGER@|$LEDGER|g" \
+    -e "s|@WAKE_WATCHER_NEEDS_HUMAN@|$NEEDS_HUMAN|g" \
+    -e "s|@WAKE_WATCHER_CLAUDE_RESOLUTION_STATE@|$CLAUDE_RESOLUTION_STATE|g" \
+    -e "s|@WAKE_WATCHER_WATERMARK_FILE@|$WATERMARK_FILE|g" \
+    -e "s|@WAKE_WATCHER_DO_NOT_WAKE_FILE@|$DO_NOT_WAKE_FILE|g" \
+    -e "s|@WAKE_WATCHER_STDOUT_LOG@|$STATE_DIR/wake-watcher.out.log|g" \
+    -e "s|@WAKE_WATCHER_STDERR_LOG@|$STATE_DIR/wake-watcher.err.log|g" \
+    -e "s|@WAKE_WATCHER_USER@|$(id -un)|g" \
+    -e "s|@WAKE_WATCHER_GROUP@|$(id -gn)|g" \
+    "$template" > "$out"
+  # belt-and-suspenders: the marker must survive templating so uninstall (and
+  # a future init) can tell this file apart from something a person wrote.
+  grep -q "$MARKER" "$out" || die "generated $out is missing the $MARKER marker — refusing to leave a file behind that uninstall couldn't recognize as its own"
+}
+
+# `init --dry-run` / `init <name> --dry-run`
+for _a in "$@"; do [ "$_a" = "--dry-run" ] && INIT_DRY_RUN=1; done
+set -- "${@/--dry-run/}"
+export INIT_DRY_RUN
+
+cmd_init() {
+  local name="$1"
+  # --dry-run: render and validate the unit, print it, but never load it.
+  # Needed because `launchctl bootstrap` targets the real user domain no matter
+  # what $HOME says -- without this there is no way to inspect what init would do.
+  [ "$(id -u)" -eq 0 ] && die "don't run 'init' as root — the service must run as your normal user (see packaging/*/wake-watcher.*.template: non-root User + NoNewPrivileges=yes). Run it as yourself; systemd install steps that need sudo are printed separately."
+  mkdir -p "$STATE_DIR"
+  LABEL="com.wake-watcher.$name"
+  PY_ABS="$(command -v "$PY")" || die "python3 not found on PATH"
+  [ -f "$SCRIPT" ] || die "missing $SCRIPT — is the wake-watcher source installed under $PREFIX/src/wake_watcher/?"
+  SAFE_PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
+
+  case "$(uname -s)" in
+    Darwin)
+      [ -f "$LAUNCHD_TEMPLATE" ] || die "missing template: $LAUNCHD_TEMPLATE"
+      local agents="$HOME/Library/LaunchAgents"
+      local target="$agents/$LABEL.plist"
+      mkdir -p "$agents"
+      if [ -e "$target" ] && ! grep -q "$MARKER" "$target" 2>/dev/null; then
+        die "$target already exists and was not generated by wake-watcherctl — refusing to overwrite it. Remove it by hand first if you're sure."
+      fi
+      render_template "$LAUNCHD_TEMPLATE" "$target"
+      plutil -lint "$target" >/dev/null || die "generated $target is not a valid plist — stopped, did not load it"
+      if [ "${INIT_DRY_RUN:-0}" = "1" ]; then
+        echo "dry-run: rendered + validated, NOT loaded: $target"
+        echo "  (launchctl bootstrap loads into your real user domain regardless of \$HOME,"
+        echo "   so --dry-run is the only way to inspect the unit without installing it)"
+      else
+        launchctl bootout "gui/$(id -u)" "$target" >/dev/null 2>&1 || true
+        launchctl bootstrap "gui/$(id -u)" "$target"
+        echo "installed + loaded: $target"
+      fi
+      echo "  WAKE_WATCHER_PROJECT_ROOT=$PROJECT_ROOT"
+      echo "  state dir: $STATE_DIR"
+      echo "  uninstall with: wake-watcherctl uninstall $name"
+      ;;
+    Linux)
+      [ -f "$SYSTEMD_TEMPLATE" ] || die "missing template: $SYSTEMD_TEMPLATE"
+      local unit_name="wake-watcher-$name.service"
+      local rendered="$STATE_DIR/$unit_name"
+      local system_unit="/etc/systemd/system/$unit_name"
+      if [ -e "$system_unit" ] && ! grep -q "$MARKER" "$system_unit" 2>/dev/null; then
+        die "$system_unit already exists and was not generated by wake-watcherctl — refusing to overwrite it. Remove it by hand first if you're sure."
+      fi
+      render_template "$SYSTEMD_TEMPLATE" "$rendered"
+      echo "rendered: $rendered"
+      echo "  WAKE_WATCHER_PROJECT_ROOT=$PROJECT_ROOT"
+      if [ "${INIT_DRY_RUN:-0}" = "1" ]; then
+        echo "dry-run: rendered only, NOT installed or enabled"
+      elif [ -w /etc/systemd/system ]; then
+        cp "$rendered" "$system_unit"
+        systemctl daemon-reload
+        systemctl enable --now "$unit_name"
+        echo "installed + started: $system_unit"
+      else
+        echo "  not root — install it yourself:"
+        echo "    sudo cp $rendered $system_unit"
+        echo "    sudo systemctl daemon-reload"
+        echo "    sudo systemctl enable --now $unit_name"
+      fi
+      echo "  uninstall with: wake-watcherctl uninstall $name"
+      ;;
+    *)
+      die "unsupported platform: $(uname -s) — use 'start'/'dry' directly instead of 'init'"
+      ;;
+  esac
+}
+
+cmd_uninstall() {
+  local name="$1"
+  cmd_stop "$name" || true
+  LABEL="com.wake-watcher.$name"
+  case "$(uname -s)" in
+    Darwin)
+      local target="$HOME/Library/LaunchAgents/$LABEL.plist"
+      launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
+      if [ -f "$target" ]; then
+        if grep -q "$MARKER" "$target" 2>/dev/null; then
+          rm -f "$target"
+          echo "removed: $target"
+        else
+          echo "  $target was not generated by wake-watcherctl — left in place"
+        fi
+      else
+        echo "  no plist at $target (already uninstalled?)"
+      fi
+      ;;
+    Linux)
+      local unit_name="wake-watcher-$name.service"
+      local system_unit="/etc/systemd/system/$unit_name"
+      if [ ! -e "$system_unit" ]; then
+        echo "  no unit at $system_unit (already uninstalled?)"
+      elif [ -w /etc/systemd/system ] || [ "$(id -u)" -eq 0 ]; then
+        systemctl disable --now "$unit_name" >/dev/null 2>&1 || true
+        if grep -q "$MARKER" "$system_unit" 2>/dev/null; then
+          rm -f "$system_unit"
+          systemctl daemon-reload
+          echo "removed: $system_unit"
+        else
+          echo "  $system_unit was not generated by wake-watcherctl — left in place"
+        fi
+      else
+        echo "  not root — remove it yourself:"
+        echo "    sudo systemctl disable --now $unit_name"
+        echo "    sudo rm $system_unit"
+        echo "    sudo systemctl daemon-reload"
+      fi
+      ;;
+  esac
+  echo "  state left in place (log, ledger, watermark): $STATE_DIR"
+}
+
+# ---------------------------------------------------------------------------
+SUBCOMMAND="${1:-status}"
+[ $# -gt 0 ] && shift || true
+
+case "$SUBCOMMAND" in
+  init)
+    PROJECT_ROOT="$(pwd)"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_init "$NAME"
+    ;;
+  uninstall)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_uninstall "$NAME"
+    ;;
+  start)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_start "$NAME"
+    ;;
+  dry)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_start "$NAME" --dry-run
+    ;;
+  stop)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_stop "$NAME"
+    ;;
+  status)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_status "$NAME"
+    ;;
+  once)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_once
+    ;;
+  tail)
+    PROJECT_ROOT="${WAKE_WATCHER_PROJECT_ROOT:-$(pwd)}"
+    NAME="$(instance_name "$PROJECT_ROOT" "${1:-}")"
+    compute_paths "$NAME"
+    cmd_tail "${2:-40}"
+    ;;
+  -h|--help|help)
+    sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    echo "usage: wake-watcherctl {init|uninstall|start|stop|status|once|dry|tail} [name]" >&2
+    exit 1
+    ;;
+esac

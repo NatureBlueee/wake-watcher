@@ -1,0 +1,60 @@
+# CI: runs this project's test suite the same way a contributor runs it
+# locally, on machines that are not the maintainer's.
+#
+# This job calls scripts/run-tests.sh and NOTHING that says `pytest` --
+# on purpose. See CONTRIBUTING.md, "Why scripts/run-tests.sh and not
+# `pytest tests/`": this suite mixes script-style test files (their own
+# runner, never raises on a failed assertion) with pytest-native ones, and
+# a bare `pytest tests/` silently collects zero tests from the script-style
+# files and exits 0. scripts/run-tests.sh is the only command whose result
+# should be trusted or quoted in a PR, and it carries its own meta-check
+# that fails this workflow loudly if a future edit ever reintroduces a bare
+# `pytest` invocation here.
+#
+# No secrets, and that is a property of the test suite rather than a choice
+# made here: nothing under tests/ talks to a live service, and wake-watcher
+# holds no credentials of its own (see SECURITY.md). pull_request (not
+# pull_request_target) on purpose -- this workflow never needs write access
+# or repo secrets, so it never needs the elevated trust that comes with them.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both platforms, because both are where this daemon actually runs:
+        # launchd on macOS, systemd on Linux -- see packaging/.
+        os: [ubuntu-latest, macos-latest]
+        # 3.9 is the floor, not a stand-in for "old": it's what macOS ships
+        # (no pyenv, no separate install) and what the production instances
+        # of this daemon actually run under. 3.13 is current. See
+        # pyproject.toml's `requires-python`.
+        python: ['3.9', '3.13']
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} · py${{ matrix.python }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: pip install -e '.[dev]'
+
+      - name: Test suite
+        # The only authoritative way to run this project's tests. Do not
+        # replace this with a direct pytest/python invocation -- see the
+        # header comment above and scripts/run-tests.sh itself.
+        run: ./scripts/run-tests.sh

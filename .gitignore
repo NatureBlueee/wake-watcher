@@ -1,0 +1,32 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime artifacts written by a running instance: log, ledger, health and
+# needs-human records. All of these carry real session ids and cwd paths
+# from whoever is running the daemon — never commit them.
+# scripts/scrub-check.sh exists to catch it if one slips in anyway.
+wake-watcher.log
+ledger.json
+health.log
+needs-human.log
+
+# Packaging / build artifacts
+*.egg-info/
+dist/
+build/
+
+.venv/
+
+# Runtime artifacts. The daemon writes state next to itself unless the env vars
+# in the plist/service template redirect it -- see docs and `wake-watcherctl init`.
+*.log
+*.heartbeat
+*.pid
+ledger.json
+watermark.json
+do-not-wake.txt
+claude-resolution-state.json
+needs-human.log
+__pycache__/
+.pytest_cache/

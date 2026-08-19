@@ -1,0 +1,41 @@
+{
+  "_readme": "Behavioral invariants, deliberately kept OUT of patterns.json (see the open-source plan's allowlist-datafication section for why). If the expected result lived next to the rule that produces it, a PR that edits a rule and its own expectation in the same diff would pass CI with zero visible drift. Keeping it here means a rule change and a golden-negative change are two separate files, so an accidental (or malicious) loosening of a veto shows up as a diff a reviewer actually has to look at. Every entry below MUST classify as transient=False, forever, regardless of how patterns.json evolves.",
+  "cases": [
+    {
+      "label": "400 schema error (unexpected tool_use_id)",
+      "detail": "API Error: 400 messages.3.content.0: unexpected `tool_use_id` found in `advisor_tool_result` blocks: srvtoolu_x. Each `advisor_tool_result` block must have a corresponding `server_tool_use` block before it.",
+      "expect_transient": false,
+      "note": "Manually retried 6x on a real job  and failed every time -- automatic retry would just loop forever."
+    },
+    {
+      "label": "403 permission error",
+      "detail": "API Error: 403 Request not allowed",
+      "expect_transient": false,
+      "note": "A permission problem, not an infra hiccup -- retrying never helps."
+    },
+    {
+      "label": "AUP policy refusal",
+      "detail": "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy (https://www.anthropic.com/legal/aup). Please double press esc to edit your last message or start a new session.",
+      "expect_transient": false,
+      "note": "A real stop, found during a full scan; retry never helps and must not be trained into the allowlist by accident."
+    },
+    {
+      "label": "402 insufficient credits",
+      "detail": "API Error: 402 This request requires more credits, or fewer max_tokens. You requested up to 128000 tokens, but can only afford 1517. To increase, visit https://openrouter.ai/settings/credits",
+      "expect_transient": false,
+      "note": "A real quota problem, not infra transient -- confirmed during the same full scan as the AUP and image-removed cases."
+    },
+    {
+      "label": "unprocessable image removed",
+      "detail": "API Error: an image in the conversation could not be processed and was removed. Double press esc to edit your message, or re-read the file if you still need it.",
+      "expect_transient": false,
+      "note": "Needs the user to edit or re-attach the file -- not a stream cut, must stay default-deny."
+    },
+    {
+      "label": "usage limit reached",
+      "detail": "Usage limit reached. Resets at 5pm.",
+      "expect_transient": false,
+      "note": "Quota exhaustion, not infra throttling -- distinct from the session-limit-with-reset-time third category, which still keeps transient=False."
+    }
+  ]
+}

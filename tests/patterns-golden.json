@@ -1,0 +1,182 @@
+{
+  "NON_TRANSIENT_VETO": [
+    {
+      "kind": "str",
+      "value": "\\brejected\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\bdenied\\b"
+    },
+    {
+      "kind": "str",
+      "value": "user (?:rejected|cancelled|canceled|aborted|declined|interrupted)"
+    },
+    {
+      "kind": "str",
+      "value": "permission (?:denied|error)"
+    },
+    {
+      "kind": "str",
+      "value": "\\b403\\b"
+    },
+    {
+      "kind": "str",
+      "value": "request not allowed"
+    },
+    {
+      "kind": "str",
+      "value": "usage limit reached"
+    },
+    {
+      "kind": "str",
+      "value": "you've (?:reached|hit) your .*limit"
+    },
+    {
+      "kind": "str",
+      "value": "quota (?:exceeded|exhausted)"
+    },
+    {
+      "kind": "str",
+      "value": "insufficient (?:credits|quota|balance)"
+    },
+    {
+      "kind": "str",
+      "value": "out of credits"
+    },
+    {
+      "kind": "str",
+      "value": "authentication (?:failed|required|error)"
+    },
+    {
+      "kind": "str",
+      "value": "re-?auth(?:enticate|entication)? required"
+    },
+    {
+      "kind": "str",
+      "value": "invalid api key"
+    },
+    {
+      "kind": "str",
+      "value": "\\b400\\b"
+    },
+    {
+      "kind": "str",
+      "value": "unexpected `?tool_use_id`?"
+    },
+    {
+      "kind": "str",
+      "value": "each .* block must have a corresponding"
+    },
+    {
+      "kind": "str",
+      "value": "messages\\.\\d+\\.content"
+    }
+  ],
+  "TRANSIENT_PATTERNS": [
+    {
+      "kind": "str",
+      "value": "connection closed mid-response"
+    },
+    {
+      "kind": "str",
+      "value": "connection closed while thinking"
+    },
+    {
+      "kind": "str",
+      "value": "\\bconnection closed\\b"
+    },
+    {
+      "kind": "str",
+      "value": "the socket connection was closed unexpectedly"
+    },
+    {
+      "kind": "str",
+      "value": "stream idle timeout"
+    },
+    {
+      "kind": "str",
+      "value": "unable to connect to api"
+    },
+    {
+      "kind": "str",
+      "value": "unknown_certificate_verification_error"
+    },
+    {
+      "kind": "str",
+      "value": "response stalled mid-stream"
+    },
+    {
+      "kind": "str",
+      "value": "server error mid-response"
+    },
+    {
+      "kind": "str",
+      "value": "\\bmid-(?:response|stream)\\b"
+    },
+    {
+      "kind": "str",
+      "value": "server is temporarily limiting requests"
+    },
+    {
+      "kind": "str",
+      "value": "\\brate limited\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\brate.?limit(?:ed|ing)?\\b.*\\bnot your usage limit\\b"
+    },
+    {
+      "kind": "str",
+      "value": "overloaded_error"
+    },
+    {
+      "kind": "str",
+      "value": "\\boverloaded\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\bapi error:\\s*502\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\bapi error:\\s*503\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\bapi error:\\s*529\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\bapi error:\\s*500\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\b502 bad gateway\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\b503 service unavailable\\b"
+    },
+    {
+      "kind": "str",
+      "value": "\\b529\\b.*overload"
+    },
+    {
+      "kind": "str",
+      "value": "this is not your fault"
+    },
+    {
+      "kind": "str",
+      "value": "please (?:retry|try again)"
+    },
+    {
+      "kind": "str",
+      "value": "temporarily unavailable"
+    },
+    {
+      "kind": "str",
+      "value": "internal server error"
+    }
+  ]
+}

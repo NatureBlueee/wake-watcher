@@ -1,0 +1,7 @@
+# Changes to these paths decide which errors get retried automatically, or type
+# into a session that is still running. CI passing is not sufficient for them --
+# see CONTRIBUTING.md, "Two hard rules".
+/src/wake_watcher/patterns.json   @NatureBlueee
+/src/wake_watcher/classify.py     @NatureBlueee
+/src/wake_watcher/wake_watcher.py @NatureBlueee
+/scripts/                         @NatureBlueee
