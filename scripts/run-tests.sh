@@ -125,6 +125,14 @@ chmod +x "$TMP_STATE/bin/claude"
 # NOT gated by WAKE_WATCHER_CLAUDE_HOME -- without this seam the suite can see
 # real sessions running on the machine.
 export WAKE_WATCHER_FAKE_AGENTS="${WAKE_WATCHER_FAKE_AGENTS:-[]}"
+
+# The load gate defers a wake when load1 > cores * MAX_LOAD_FACTOR. That is right
+# in production -- do not pile another cold-loading process onto a full machine --
+# but it makes the suite depend on how busy the host happens to be. CI runners are
+# small and busy, so on macOS every "should wake" assertion failed while the same
+# commit was green on a developer laptop. Disable the gate for tests; the gate's own
+# behaviour is covered separately by the mutation suite.
+export WAKE_WATCHER_MAX_LOAD_FACTOR="${WAKE_WATCHER_MAX_LOAD_FACTOR:-100000}"
 export WAKE_WATCHER_CLAUDE_RESOLUTION_STATE="$TMP_STATE/claude-resolution-state.json"
 export WAKE_WATCHER_DO_NOT_WAKE_FILE="$TMP_STATE/do-not-wake.txt"
 export PYTHONDONTWRITEBYTECODE=1
