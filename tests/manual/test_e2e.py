@@ -131,6 +131,10 @@ def main() -> int:
     env["WAKE_WATCHER_LEDGER"] = str(ledger)
     env["WAKE_WATCHER_LOG"] = str(log)
     env["WAKE_WATCHER_REQUIRE_DEAD"] = "0"
+    # Same reason as the dry-run case above: the sandbox job lives under tmp, so the
+    # this-project filter would skip it. Without this the whole test reports "0 wakes"
+    # and looks like a broken delivery path when nothing is actually wrong with delivery.
+    env["WAKE_WATCHER_PROJECT_ROOT"] = ""
     env["WAKE_WATCHER_MESSAGE"] = (
         "刚才网络波动了，请重试并继续。先复述你记住的那个 codeword 证明续上了上文。")
     subprocess.run([sys.executable, str(HERE / "wake_watcher.py"), "--once"],

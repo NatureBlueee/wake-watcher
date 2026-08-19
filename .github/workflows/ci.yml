@@ -58,3 +58,60 @@ jobs:
         # replace this with a direct pytest/python invocation -- see the
         # header comment above and scripts/run-tests.sh itself.
         run: ./scripts/run-tests.sh
+
+  # The systemd unit shipped in packaging/ had never been executed anywhere -- the
+  # README would have told Linux users to install something no one had run. A GitHub
+  # ubuntu runner is a real VM with real systemd, so the check happens where the claim
+  # is made rather than on the maintainer's Mac.
+  linux-systemd:
+    name: linux · systemd unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
+        with:
+          python-version: '3.9'
+
+      - name: systemd is actually present
+        run: systemctl --version | head -1
+
+      - name: render the unit through wake-watcherctl (dry-run, installs nothing)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/proj && cd /tmp/proj
+          "$GITHUB_WORKSPACE/bin/wake-watcherctl" init --dry-run 2>&1 | tee /tmp/init.out
+          unit=$(find "${XDG_STATE_HOME:-$HOME/.local/state}/wake-watcher" -name '*.service' | head -1)
+          test -n "$unit" || { echo "no unit rendered"; exit 1; }
+          echo "UNIT=$unit" >> "$GITHUB_ENV"
+          echo "--- rendered unit ---"; cat "$unit"
+
+      - name: no placeholders survived rendering
+        run: |
+          ! grep -q '@[A-Z_]*@' "$UNIT" || { echo "unrendered placeholder left in unit"; exit 1; }
+
+      - name: systemd itself accepts the unit
+        run: |
+          set -euo pipefail
+          sudo cp "$UNIT" /etc/systemd/system/wake-watcher-ci.service
+          sudo systemd-analyze verify /etc/systemd/system/wake-watcher-ci.service
+          echo "systemd-analyze verify: accepted"
+
+      - name: the hardening the threat model promises is really in the unit
+        run: |
+          set -euo pipefail
+          grep -qE '^User=' "$UNIT"            || { echo "missing User="; exit 1; }
+          ! grep -qE '^User=root' "$UNIT"      || { echo "unit runs as root"; exit 1; }
+          grep -q 'NoNewPrivileges=yes' "$UNIT" || { echo "missing NoNewPrivileges"; exit 1; }
+          echo "runs non-root, NoNewPrivileges set"
+
+      - name: the daemon starts under this unit's own settings
+        run: |
+          set -euo pipefail
+          export WAKE_WATCHER_CLAUDE_HOME=/tmp/fake-home
+          export WAKE_WATCHER_PROJECT_ROOT=""
+          export WAKE_WATCHER_FAKE_AGENTS='[]'
+          export WAKE_WATCHER_LOG=/tmp/w.log WAKE_WATCHER_LEDGER=/tmp/l.json
+          export WAKE_WATCHER_HEARTBEAT=/tmp/h WAKE_WATCHER_WATERMARK_FILE=/tmp/wm.json
+          mkdir -p /tmp/fake-home/jobs
+          python3 src/wake_watcher/wake_watcher.py --once --dry-run
+          echo "--- log ---"; cat /tmp/w.log
