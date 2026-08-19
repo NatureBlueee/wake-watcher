@@ -14,6 +14,26 @@ SKIP_DIRS = {".git", "__pycache__", ".pytest_cache"}
 # Referenced by name but legitimately not repo files.
 ALLOW = {"state.json", "settings.json", "package.json", "continuation.md", "AGENTS.md", "CLAUDE.md"}
 
+# Files an open-source repository is expected to carry. CHANGELOG.md went missing
+# for an entire release cycle because nothing referenced it in backticks, so the
+# reference check above had nothing to catch. Presence and reference are different
+# questions and need different checks.
+REQUIRED = [
+    "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md",
+    "SECURITY.md", "CODE_OF_CONDUCT.md", "THREAT-MODEL.md",
+    "pyproject.toml", ".gitignore", ".github/workflows/ci.yml",
+    "docs/WHY.md", "docs/MANUAL-VERIFICATION.md",
+]
+
+
+def check_required():
+    absent = [f for f in REQUIRED if not (ROOT / f).exists()]
+    for f in absent:
+        print(f"  ABSENT   {f:38s} (required for an open-source release)")
+    print(f"{len(REQUIRED) - len(absent)}/{len(REQUIRED)} required files present")
+    return absent
+
+
 def main():
     missing, checked = [], 0
     for md in sorted(ROOT.rglob("*.md")):
@@ -31,7 +51,8 @@ def main():
     for doc, ref in missing:
         print(f"  MISSING  {ref:38s} referenced by {doc}")
     print(f"\n{checked - len(missing)}/{checked} referenced paths exist")
-    return 1 if missing else 0
+    absent = check_required()
+    return 1 if (missing or absent) else 0
 
 if __name__ == "__main__":
     sys.exit(main())

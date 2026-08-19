@@ -55,6 +55,12 @@ for f in "${FILES[@]}"; do
   # that is how it proves a declared deletion happened. Scanning it would report
   # those assertions as leaks.
   case "$f" in */verify-all-changes.sh) continue;; esac
+  # Runtime artifacts land next to the code when the daemon is run from a checkout
+  # (state paths default to the script directory). They are gitignored, so they can
+  # never reach a release -- but they do sit in the working tree, and a log full of
+  # real session ids is exactly what this check is for. Skip anything git ignores:
+  # scanning it produces noise that trains people to ignore a red scrub.
+  if git -C "$ROOT" check-ignore -q "$f" 2>/dev/null; then continue; fi
   SCAN_FILES+=("$f")
 done
 

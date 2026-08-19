@@ -157,3 +157,47 @@ public issue.
 | `tests/` | the test manifest; `tests/manual/` needs a real API call and isn't run in CI |
 | `docs/WHY.md` | why this exists and what it has actually caught |
 | `THREAT-MODEL.md` | the honest risk read — read before touching anything in the review list above |
+
+## Strings that must never be translated
+
+Two kinds of string in this codebase look like leftovers from before the English
+translation pass. They are not. Translating them breaks things silently — nothing
+raises, a check just stops matching and quietly never fires again.
+
+**1. Parse anchors.** `vitality_verdict()` reads the stdout of whatever external
+command `WAKE_WATCHER_LIVENESS_CMD` points at. If that command speaks a language
+other than English, the substring it is matched against has to stay in that
+language. There are currently two such lines, both marked in place.
+
+**2. Log phrases that tests assert on.** Several tests check visibility by
+matching a fragment of a log line:
+
+```python
+_check("moved past the error" in log_text, "SKIP trace: ...")
+```
+
+This means log wording and test assertions are coupled **word for word**. Rewording
+a log message without updating the assertion turns a real check into one that can
+never fail again. If you touch a log line, grep the tests for a fragment of it.
+
+This coupling is a known weakness, not a design goal — a future change should
+assert on stable markers (`SKIP`, `WAKE`, a session id) instead of prose. Until
+then, the two move together.
+
+## Two failure modes this project keeps running into
+
+Both cost real debugging time here, and both are easy to reproduce by accident.
+
+**A green test suite that never ran what you think it ran.** Seven of the ten test
+files report failures by returning a count rather than raising, so `pytest` scores
+them as passing no matter what they found. This is why `scripts/run-tests.sh`
+exists and why CI calls only that script — never bare `pytest`. There is a check in
+the suite that fails if `ci.yml` ever grows a bare `pytest` invocation.
+
+**Behaviour that only works on the machine it was written on.** The first CI run
+after publication failed on every job, because the tests needed a `claude` binary
+that happened to be on the author's PATH. The second failed only on macOS, because
+the load gate deferred every wake on a busy runner. Neither was findable locally.
+If you add a test that depends on something outside the repository — a binary,
+spare CPU, a network route, a TTY — assume it will fail on someone else's machine
+and give it a seam.

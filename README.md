@@ -204,10 +204,15 @@ Boundaries, stated up front so you can check them against what you need:
   attach TUI — none of that is a published interface. An upstream change can
   break this tool. The design answer is to **degrade loudly**: refuse to act and
   say so, never keep a cheerful heartbeat while silently finding nothing.
-- **Linux is untested on real hardware.** macOS/launchd is what the track record
-  above was earned on. The systemd template renders a *system* unit under
-  `/etc/systemd/system/` and needs sudo to install — it is shipped as
-  **untested**. Reports welcome.
+- **Linux is verified in CI, but the track record is macOS's.** Every push runs a
+  job on a real Ubuntu VM that renders the systemd unit through `wake-watcherctl
+  init`, has systemd itself accept it (`systemd-analyze verify`, systemd 255),
+  asserts it runs non-root with `NoNewPrivileges=yes`, and starts the daemon once.
+  What that does *not* cover: the numbers above were earned on macOS/launchd over
+  two months. Nobody has yet run this on Linux for weeks against real traffic.
+  The systemd template installs a *system* unit under `/etc/systemd/system/` and
+  needs sudo. Reports from long-running Linux installs are the thing this project
+  most wants to hear about.
 - **No Windows.** PTY injection is built on `pty.fork()`, which is POSIX-only.
 
 ### PTY injection is opt-in and off

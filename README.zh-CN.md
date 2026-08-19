@@ -173,9 +173,13 @@ PTY 注入依赖它控制不了的终端渲染时序，这个依赖是结构性�
   `claude agents --json`、attach TUI 的渲染时序——没有一样是有契约的公开接口。上游一次
   改动就可能让它失效。设计上的应对是**要坏就大声坏**：读不懂就拒绝动作并且喊出来，
   绝不允许心跳照打、整夜"什么都没找到"、从外面看还像在正常工作。
-- **Linux 尚未实机验证。** 上面那份战绩是在 macOS/launchd 上挣出来的。systemd 模板
-  渲染的是 `/etc/systemd/system/` 下的**系统级 unit**，安装需要 sudo——它是按
-  **untested（未实机验证）** 发出来的，欢迎回报结果。
+- **Linux 已在 CI 上验证，但战绩是 macOS 挣的。** 每次 push 都会在真实的 Ubuntu VM 上跑一个
+  job：用 `wake-watcherctl init` 渲染 systemd unit，交给 systemd 自己校验
+  （`systemd-analyze verify`，systemd 255），断言它以非 root 运行且带 `NoNewPrivileges=yes`，
+  最后真的把守护进程启动一次。
+  **这不覆盖的是**：上面那些数字是 macOS/launchd 上两个月挣出来的，还没有人在 Linux 上
+  对着真实流量跑过几周。systemd 模板装的是 `/etc/systemd/system/` 下的**系统级 unit**，
+  需要 sudo。长期运行的 Linux 实例回报，是这个项目最想听到的东西。
 - **不支持 Windows。** PTY 注入建立在 `pty.fork()` 上，那是 POSIX-only。
 
 ### PTY 注入是独立开关，默认关闭
