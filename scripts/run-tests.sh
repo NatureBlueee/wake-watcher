@@ -108,6 +108,23 @@ export WAKE_WATCHER_LEDGER="$TMP_STATE/ledger.json"
 export WAKE_WATCHER_HEARTBEAT="$TMP_STATE/wake-watcher.heartbeat"
 export WAKE_WATCHER_WATERMARK_FILE="$TMP_STATE/watermark.json"
 export WAKE_WATCHER_NEEDS_HUMAN="$TMP_STATE/needs-human.log"
+
+# A stub `claude` binary. Without one, every delivery path short-circuits to
+# "all three layers of claude binary resolution failed" and every wake-related
+# assertion fails -- which is exactly what happened on CI while the maintainer's
+# laptop stayed green, because the laptop had the real CLI on PATH. The tests
+# never invoke it for real (they patch subprocess or use the FAKE_DELIVER seam);
+# they only need resolution to succeed.
+export WAKE_WATCHER_CLAUDE_KNOWN_PATHS="$TMP_STATE/bin/claude"
+mkdir -p "$TMP_STATE/bin"
+printf '#!/bin/sh\necho "stub claude: this binary is never meant to run" >&2\nexit 1\n' \
+  > "$TMP_STATE/bin/claude"
+chmod +x "$TMP_STATE/bin/claude"
+
+# The interactive candidate source shells out to `claude agents --json`, which is
+# NOT gated by WAKE_WATCHER_CLAUDE_HOME -- without this seam the suite can see
+# real sessions running on the machine.
+export WAKE_WATCHER_FAKE_AGENTS="${WAKE_WATCHER_FAKE_AGENTS:-[]}"
 export WAKE_WATCHER_CLAUDE_RESOLUTION_STATE="$TMP_STATE/claude-resolution-state.json"
 export WAKE_WATCHER_DO_NOT_WAKE_FILE="$TMP_STATE/do-not-wake.txt"
 export PYTHONDONTWRITEBYTECODE=1
