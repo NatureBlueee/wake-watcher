@@ -135,8 +135,9 @@ one fixture per condition and say so in the PR description.
 ## Reporting a bug
 
 Include: the exact error string wake-watcher failed to classify (or
-misclassified), the output of `wake-watcher --check-string "<that string>"`,
-and your Python version. Most failures here are either an unmatched error
+misclassified), the output of `python3 src/wake_watcher/classify.py
+--check-string "<that string>"` (or `wake-watcherctl check "<that string>"` if
+you installed it), and your Python version. Most failures here are either an unmatched error
 string or an environment mismatch (wrong interpreter, wrong project root),
 and those two things together usually show which.
 

@@ -220,6 +220,35 @@ def error_signature(detail: str | None) -> str:
     return "unknown"
 
 
+def check_string_report(text, error_epoch=None):
+    """Render the human-readable verdict for one error string.
+
+    Returns the report as a string rather than printing it, so both entry
+    points that expose this -- `classify.py --check-string` and
+    `wake-watcher --check-string` -- format it identically. Two commands
+    that disagree about what the classifier said would be worse than
+    having only one.
+    """
+    result = classify(text, error_epoch=error_epoch)
+    verdict = "TRANSIENT -> would wake" if result["transient"] else "NOT transient -> would NOT wake"
+    lines = [
+        f"verdict:     {verdict}",
+        f"reason:      {result['reason']}",
+        f"matched:     {result['matched']!r}",
+        f"vetoed_by:   {result['vetoed_by']!r}",
+        f"session_limit: {result['session_limit']}",
+        f"reset_epoch: {result['reset_epoch']!r}",
+    ]
+    # The reset-time note is only meaningful when a reset time was actually
+    # parsed. Printing it on every verdict trains readers to ignore it.
+    if error_epoch is None and result["reset_epoch"] is not None:
+        lines.append(
+            "note: reset_epoch based on current time, may be inaccurate "
+            "(pass --error-epoch to anchor it to when the error actually happened)"
+        )
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     import argparse
     import sys
@@ -252,17 +281,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.check_string is not None:
-        result = classify(args.check_string, error_epoch=args.error_epoch)
-        verdict = "TRANSIENT -> would wake" if result["transient"] else "NOT transient -> would NOT wake"
-        print(f"verdict:     {verdict}")
-        print(f"reason:      {result['reason']}")
-        print(f"matched:     {result['matched']!r}")
-        print(f"vetoed_by:   {result['vetoed_by']!r}")
-        print(f"session_limit: {result['session_limit']}")
-        print(f"reset_epoch: {result['reset_epoch']!r}")
-        if args.error_epoch is None:
-            print("note: reset_epoch based on current time, may be inaccurate "
-                  "(pass --error-epoch to anchor it to when the error actually happened)")
+        print(check_string_report(args.check_string, error_epoch=args.error_epoch))
         sys.exit(0)
 
     # quick manual smoke (legacy positional-arg mode, no flags)

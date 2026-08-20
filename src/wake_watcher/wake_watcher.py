@@ -99,7 +99,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from classify import classify
+from classify import check_string_report, classify
 
 # ── Config (spec #2 cap + dual-lane backoff) ──────────────────────────────────
 HOME = Path(os.environ.get("WAKE_WATCHER_CLAUDE_HOME", str(Path.home() / ".claude")))
@@ -2055,7 +2055,20 @@ def main() -> None:
     ap.add_argument("--interval", type=int, default=POLL_INTERVAL_SEC)
     ap.add_argument("--reset-watermark", action="store_true",
                     help="delete the watermark file then exit (next start begins from a fresh now)")
+    ap.add_argument("--check-string", metavar="TEXT",
+                    help="classify one error string and exit — reads nothing, wakes nothing")
+    ap.add_argument("--error-epoch", type=float, default=None, metavar="EPOCH",
+                    help="with --check-string: unix timestamp of when the error happened, "
+                         "which anchors session-limit reset-time parsing")
     args = ap.parse_args()
+
+    # Answered before anything else touches the filesystem: --check-string is
+    # the one command that must work on a machine with no Claude Code install,
+    # no state directory and no project to point at. Anything that reads
+    # ~/.claude or writes a heartbeat below here would break that promise.
+    if args.check_string is not None:
+        print(check_string_report(args.check_string, error_epoch=args.error_epoch))
+        return
 
     if args.reset_watermark:
         reset_watermark()
@@ -2073,7 +2086,11 @@ def main() -> None:
     )
     if args.once:
         n = scan_once(dry_run=args.dry_run, watermark=watermark)
-        log(f"scan once complete: {n} wake(s) delivered")
+        # A dry run delivers nothing. Saying "delivered" there is the exact
+        # confusion this project keeps having to correct elsewhere: "it was
+        # skipped" and "it never happened" must not read the same in a log.
+        log("scan once complete: {} {}".format(
+            n, "would-wake(s) planned" if args.dry_run else "wake(s) delivered"))
         return
     try:
         while True:
