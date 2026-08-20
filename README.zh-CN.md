@@ -18,6 +18,9 @@ retry。
 wake-watcher 是一个跑在你本机的守护进程，替你去看：轮询、把错误拿去跟一份规则文件
 比对、只唤醒**可以安全唤醒的**，然后回头验证这个会话到底有没有真的续上。
 
+你现在就可以看它判一次——拿你自己遇到过的那条错误，不用装任何东西，机器上也不需要
+有 Claude Code：[`--check-string`](#不装任何东西先看它判一次)。
+
 **战绩，截至 2026-08-18。** 大约两个月、6 个项目实例：**167 个会话被唤醒过共 419
 次，其中 130 个会话——约 78%——被确认真的续跑了。** "确认"是双信号口径：retry
 **送达了**，**并且**在验收窗口内真的出现了一次新回合。光是送达，永远不算救活。
@@ -36,8 +39,8 @@ wake-watcher 对你的任务在做什么没有任何模型；它读的是一条�
 所以默认值是刻意保守的：
 
 - **装完不会自己跑。** 你不发话，它不扫描、不唤醒。
-- **本 README 给你的第一条命令是 dry-run**，不是 start。先让它空跑一天，看它会怎么
-  判，再决定要不要让它真动手。
+- **本 README 给你的第一条命令只会打印一个判定**；而第一条会靠近你的会话的命令是
+  dry-run，不是 start。先让它空跑一天，看它会怎么判，再决定要不要让它真动手。
 
 [`THREAT-MODEL.md`](THREAT-MODEL.md) 是风险优先的那一份：三个爆炸半径过大的面、
 哪些测到了哪些没测到、以及为什么上游一次改动就可能让这个工具失效。真要把它指向一个
@@ -59,11 +62,49 @@ wake-watcher 对你的任务在做什么没有任何模型；它读的是一条�
 这种不对称是故意的。少唤醒一次，代价是你晚点手动推一下某个卡住的会话；多唤醒一次，
 代价可能是把一个真实故障无限重试掉，而不是端到你面前。
 
-拿不准某条字符串会被怎么判，不用跑任何东西：
+### 不装任何东西，先看它判一次
+
+分类器是那份规则文件的一个纯函数：不读任何状态、不起守护进程、不需要装 Claude Code，
+也**不可能**唤醒任何东西。全部前提就是一次 clone 加 Python 3.9+：
 
 ```sh
-wake-watcher --check-string "<那条错误原文>"
-``` ---
+git clone https://github.com/NatureBlueee/wake-watcher && cd wake-watcher
+python3 src/wake_watcher/classify.py --check-string "API Error: 500 internal server error"
+```
+
+（这份 checkout 是一次性的，看完扔掉就行。下面的[安装](#安装)会自己 clone 到一个
+固定位置。）
+
+```
+verdict:     TRANSIENT -> would wake
+reason:      transient infra error: matched /\bapi error:\s*500\b/
+matched:     '\\bapi error:\\s*500\\b'
+vetoed_by:   None
+session_limit: False
+reset_epoch: None
+```
+
+喂一条它**该拒绝**的进去，你拿到的不是一个"不"，是拒绝的**理由**——而且两种拒绝
+不是一回事：
+
+```
+--check-string "Claude AI usage limit reached"
+  verdict:  NOT transient -> would NOT wake
+  reason:   vetoed: matched non-transient signal /usage limit reached/
+
+--check-string "Error: something weird happened"
+  verdict:  NOT transient -> would NOT wake
+  reason:   no transient pattern matched (default-deny)
+```
+
+前一条是**被认出来然后否决的**；后一条是**压根没被认出来**——它仅仅因为这一点就被
+拒绝。
+
+装完之后，同一个检查是 `wake-watcherctl check "<那条错误原文>"`；如果你是用 pip 装的，
+那就是 `wake-watcher --check-string "<那条错误原文>"`。
+
+要是你真在野外撞见的某条字符串被判错了，**那段输出本身就是 bug 报告**——原样贴进
+issue 就行。 ---
 
 ## 安装
 
@@ -86,8 +127,23 @@ cd /path/to/your/project
 wake-watcherctl dry              # 前台运行，什么都不唤醒——从这条开始
 ```
 
-`dry` 会跑完整的扫描循环，把它**本来会做的每一个判断**打出来。让它跟着一次真实的
-工作时段跑一遍。等到"它会做的"和"你会做的"对得上了，再：
+`dry` 会跑完整的扫描循环，把它**本来会做的每一个判断**打出来。两个卡住的会话——
+一边一个——长这样（会话 id 和路径做了缩短，其余都是代码原样打出来的）：
+
+```
+[2026-08-20T04:33:59Z] watermark initialized = 2026-08-20T04:33:59Z (now-forward starting point; sessions already stuck before this moment are never retroactively woken).
+[2026-08-20T04:33:59Z] wake-watcher start (jobs=/Users/you/.claude/jobs, max_wakes=3, backoff_base=60s, slow_retry=3600s, interval=30s, dry_run=True, require_dead=True, watermark=2026-08-20T04:33:59Z)
+[2026-08-20T04:33:59Z] NET reachable again (api.anthropic.com) -- resuming normal wake behaviour.
+[2026-08-20T04:34:00Z] WAKE session=b7d1…c39f attempt #1/3 lane=fast (live error, no retry sent yet (transient infra error: matched /\bapi error:\s*500\b/)) next_backoff=60s — DRY-RUN would resume b7d1…c39f with respawnFlags=[(none)] (cwd=/Users/you/myproject)
+[2026-08-20T04:34:00Z] SKIP session=4e02…a1d8 state=blocked trailing error is non-transient (vetoed: matched non-transient signal /usage limit reached/) — not waking.
+[2026-08-20T04:34:01Z] scan once complete: 1 would-wake(s) planned
+```
+
+每一行都带着它的理由，**拒绝那几行也带**——这件事比听上去重要，因为否则"什么问题
+都没有"和"这次扫描压根没看见它"打出来是一样安静的。dry-run 说的是
+`would-wake(s) planned`，不是 `delivered`；只有真发出去了，那个词才会变。
+
+让它跟着一次真实的工作时段跑一遍。等到"它会做的"和"你会做的"对得上了，再：
 
 ```sh
 wake-watcherctl init             # 为**当前这个目录**生成并加载 launchd/systemd 服务
@@ -99,6 +155,7 @@ wake-watcherctl init             # 为**当前这个目录**生成并加载 laun
 
 | | |
 |---|---|
+| `wake-watcherctl check "<错误原文>"` | 判一条错误字符串然后退出。不建状态目录、不认实例、不认项目——在哪儿跑都安全。 |
 | `wake-watcherctl dry [name]` | 前台 `--dry-run`。只判断、只打印，不唤醒任何东西。**在 `start` / `init` 之前先跑它。** |
 | `wake-watcherctl once [name]` | 真跑一轮扫描然后退出。注意：这条**是会唤醒的**，它是调试用的，不是"安全试跑"。 |
 | `wake-watcherctl start [name]` | 后台进程，不装系统服务；登出或重启就没了。 |

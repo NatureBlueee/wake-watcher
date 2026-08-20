@@ -8,6 +8,46 @@ The git history of the private repository this was extracted from is not
 published — it carries machine paths, session ids and internal project names.
 This file is the public record of what changed and why.
 
+## [0.1.2] — 2026-08-20
+
+The one command this README offered to someone who had not installed anything
+did not exist. Found by running it.
+
+### Fixed
+
+- **`wake-watcher --check-string` was not a command.** The README, in both
+  languages, and CONTRIBUTING's bug-report instructions all told you to run it.
+  `--check-string` was only ever implemented on `classify.py`'s own `__main__`;
+  `wake_watcher.py`'s argument parser rejected the flag outright, and
+  `install.sh` puts only `wake-watcherctl` on your PATH, so neither installation
+  route produced a working command. The check is now real on all three entry
+  points, and the formatting lives in one function rather than being duplicated
+  — two commands disagreeing about what the classifier said would be worse than
+  having only one.
+- **A dry run reported wakes as `delivered`.** It delivers nothing. The
+  completion line now says `would-wake(s) planned` when `--dry-run` is set. This
+  is the same confusion this project has had to correct elsewhere: "it was
+  correctly skipped" and "it never happened" must not read alike in a log.
+- **The reset-time caveat printed on every verdict**, including the ones with no
+  reset time in them. It now prints only when a reset time was actually parsed;
+  a warning that appears unconditionally trains the reader to skip it.
+
+### Added
+
+- `wake-watcherctl check "<error text>"` — classify one string and exit. It
+  deliberately builds no state directory and resolves no project root, so it
+  stays runnable on a machine that has never installed Claude Code.
+- README (both languages) now shows a real `--dry-run` log: one session woken,
+  one vetoed, with the reasons the code actually prints. Every previous
+  description of the output was prose about the output.
+- `tests/test_check_string_cli.py` — the gate that was missing. It runs
+  `--check-string` on all three entry points, asserts they agree character for
+  character, asserts the check leaves no state behind, and asserts that every
+  `wake-watcherctl` subcommand named in either README exists in the dispatcher.
+  Verified by breaking each of those three ways in turn and confirming it goes
+  red. A README is a set of falsifiable claims about behaviour; until now
+  nothing was falsifying them.
+
 ## [0.1.1] — 2026-08-19
 
 Three defects, all found by running the code somewhere other than the machine it

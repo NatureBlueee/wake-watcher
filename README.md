@@ -20,6 +20,10 @@ wake-watcher is a local daemon that looks so you don't have to. It polls, checks
 the error against a rule file, wakes only what is safe to wake, and then goes
 back to verify whether the session actually resumed.
 
+You can watch it make one of those decisions right now, on an error string of
+your own, without installing anything or having Claude Code on the machine:
+[`--check-string`](#try-one-decision-without-installing-anything).
+
 **Track record, as of 2026-08-18.** Across roughly two months and six project
 instances: **167 sessions were woken a combined 419 times, and 130 of those
 sessions — about 78% — were confirmed to have actually resumed.** Confirmed
@@ -44,8 +48,9 @@ So the defaults are deliberately timid:
 
 - **Installing it does not start it.** Nothing scans, nothing wakes, until you
   say so.
-- **The first command this README gives you is a dry run**, not a live one.
-  Watch it decide for a day before it is allowed to act.
+- **The first command this README gives you only prints a verdict**, and the
+  first one that goes near your sessions is a dry run, not a live one. Watch it
+  decide for a day before it is allowed to act.
 
 [`THREAT-MODEL.md`](THREAT-MODEL.md) is the risk-first read: the three surfaces
 with outsized blast radius, what is tested and what isn't, and why an upstream
@@ -70,11 +75,50 @@ The asymmetry is on purpose. Under-waking costs you a nudge on one stuck
 session; over-waking risks retrying a real failure forever instead of showing it
 to you.
 
-To check a string you are unsure about, without running anything:
+### Try one decision without installing anything
+
+The classifier is a pure function of that file. It reads no state, starts no
+daemon, needs no Claude Code install, and cannot wake anything. A checkout and
+Python 3.9+ is the whole requirement:
 
 ```sh
-wake-watcher --check-string "<the exact error text>"
-``` ---
+git clone https://github.com/NatureBlueee/wake-watcher && cd wake-watcher
+python3 src/wake_watcher/classify.py --check-string "API Error: 500 internal server error"
+```
+
+(This checkout is disposable — throw it away afterwards. [Install](#install)
+below clones into a permanent location of its own.)
+
+```
+verdict:     TRANSIENT -> would wake
+reason:      transient infra error: matched /\bapi error:\s*500\b/
+matched:     '\\bapi error:\\s*500\\b'
+vetoed_by:   None
+session_limit: False
+reset_epoch: None
+```
+
+Feed it something it should refuse and you get the reason for the refusal, not
+just a "no" — and the two refusals are different:
+
+```
+--check-string "Claude AI usage limit reached"
+  verdict:  NOT transient -> would NOT wake
+  reason:   vetoed: matched non-transient signal /usage limit reached/
+
+--check-string "Error: something weird happened"
+  verdict:  NOT transient -> would NOT wake
+  reason:   no transient pattern matched (default-deny)
+```
+
+The first was recognised and rejected. The second was never recognised at all —
+and is refused for that reason alone.
+
+Once installed, the same check is `wake-watcherctl check "<text>"`, or
+`wake-watcher --check-string "<text>"` if you installed with pip.
+
+If a string you actually hit comes back wrong, that output *is* the bug report —
+paste it into an issue. ---
 
 ## Install
 
@@ -98,6 +142,23 @@ wake-watcherctl dry              # foreground, wakes nothing — start here
 ```
 
 `dry` runs the full scan loop and prints every decision it *would* have made.
+Two stalled sessions, one of each kind, look like this — session ids and paths
+shortened, everything else is what the code prints:
+
+```
+[2026-08-20T04:33:59Z] watermark initialized = 2026-08-20T04:33:59Z (now-forward starting point; sessions already stuck before this moment are never retroactively woken).
+[2026-08-20T04:33:59Z] wake-watcher start (jobs=/Users/you/.claude/jobs, max_wakes=3, backoff_base=60s, slow_retry=3600s, interval=30s, dry_run=True, require_dead=True, watermark=2026-08-20T04:33:59Z)
+[2026-08-20T04:33:59Z] NET reachable again (api.anthropic.com) -- resuming normal wake behaviour.
+[2026-08-20T04:34:00Z] WAKE session=b7d1…c39f attempt #1/3 lane=fast (live error, no retry sent yet (transient infra error: matched /\bapi error:\s*500\b/)) next_backoff=60s — DRY-RUN would resume b7d1…c39f with respawnFlags=[(none)] (cwd=/Users/you/myproject)
+[2026-08-20T04:34:00Z] SKIP session=4e02…a1d8 state=blocked trailing error is non-transient (vetoed: matched non-transient signal /usage limit reached/) — not waking.
+[2026-08-20T04:34:01Z] scan once complete: 1 would-wake(s) planned
+```
+
+Every line carries the reason, including the refusals — which matters more than
+it sounds, because *"nothing was wrong"* and *"the scan never saw it"* both
+produce a quiet log otherwise. A dry run says `would-wake(s) planned`, never
+`delivered`; the word only changes when something actually went out.
+
 Leave it running through a real working session. When what it would have done
 matches what you would have done:
 
@@ -111,6 +172,7 @@ wake-watcherctl init             # a launchd/systemd service scoped to THIS dire
 
 | | |
 |---|---|
+| `wake-watcherctl check "<text>"` | classify one error string and exit. No state directory, no instance, no project — safe anywhere. |
 | `wake-watcherctl dry [name]` | foreground, `--dry-run`. Decides, prints, wakes nothing. **Do this before `start` or `init`.** |
 | `wake-watcherctl once [name]` | one real scan pass, then exit. This one **can** wake something — it is for debugging, not for a safe trial. |
 | `wake-watcherctl start [name]` | background process, no OS service. Dies at logout or reboot. |

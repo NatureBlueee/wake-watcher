@@ -91,7 +91,13 @@ automatically-covered code in the repository, which is why it is off by default.
 
 ## 3. What is covered automatically, for contrast
 
-- Ten deterministic test files, no API cost, run via `scripts/run-tests.sh`
+- Eleven deterministic test files, no API cost, run via `scripts/run-tests.sh`
+- `tests/test_check_string_cli.py` runs the one command the README offers to a
+  stranger, on all three entry points, and asserts they agree and leave no state
+  behind. It also checks that every `wake-watcherctl` subcommand named in either
+  README exists in the dispatcher. That check is here because the command the
+  README advertised for the first two releases did not exist — see the 0.1.2
+  entry in `CHANGELOG.md`
 - A mutation gate (`scripts/verify-mutations.py`) that breaks each of seven safety
   contracts in turn and asserts a test goes red — coverage says a line ran, this
   says you would find out if it were wrong
