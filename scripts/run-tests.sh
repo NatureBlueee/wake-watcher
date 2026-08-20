@@ -74,6 +74,7 @@ PYTEST_TESTS=(
   test_dual_signal
   test_session_limit_wake
   test_claude_resolution
+  test_check_string_cli
 )
 
 if [ "$MANIFEST_ONLY" -eq 1 ]; then

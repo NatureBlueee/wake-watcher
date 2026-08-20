@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # wake-watcherctl — control one wake-watcher instance.
 #
+#   wake-watcherctl check "<error>"   classify one error string and exit — touches nothing
 #   wake-watcherctl dry [name]        foreground, --dry-run — do this before `start`/`init`
 #   wake-watcherctl once [name]       single scan pass then exit (debugging)
 #   wake-watcherctl start [name]      background, no OS service — dies at logout/reboot
@@ -335,11 +336,19 @@ case "$SUBCOMMAND" in
     compute_paths "$NAME"
     cmd_tail "${2:-40}"
     ;;
+  check)
+    # Deliberately does not call compute_paths: no state directory, no
+    # project root, no instance. Classifying a string is a pure function of
+    # patterns.json, and it stays runnable on a machine that has never
+    # installed Claude Code.
+    [ $# -ge 1 ] || die 'usage: wake-watcherctl check "<the exact error text>"'
+    exec "$PY" "$PREFIX/src/wake_watcher/classify.py" --check-string "$@"
+    ;;
   -h|--help|help)
-    sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
-    echo "usage: wake-watcherctl {init|uninstall|start|stop|status|once|dry|tail} [name]" >&2
+    echo "usage: wake-watcherctl {check|init|uninstall|start|stop|status|once|dry|tail} [name]" >&2
     exit 1
     ;;
 esac
